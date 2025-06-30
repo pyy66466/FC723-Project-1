@@ -1,0 +1,59 @@
+# === OS-specific ===
+.DS_Store
+Thumbs.db
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv/
+env/
+venv/
+pip-wheel-metadata/
+*.log
+
+# === IDEs ===
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+*.iml
+
+# === Testing / coverage ===
+htmlcov/
+.coverage
+coverage.xml
+*.cover
+.cache
+.tox/
+.pytest_cache/
+
+# === Jupyter ===
+.ipynb_checkpoints/
+
+# === mypy / lint / profiling ===
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.prof
+.profile
+
+# === Environment / dotenv ===
+.env
+.env.*
+
+# === Backup / temp ===
+*~
+*.bak
+*.swp
+*.tmp

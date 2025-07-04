@@ -8,8 +8,9 @@ def main() -> None:
 1. Check availability
 2. Book seat
 3. Free seat
-4. Show seating chart
-5. Exit
+4. Book adjacent seats
+5. Show seating chart
+6. Exit
 Choice: """
 
     while True:
@@ -41,9 +42,20 @@ Choice: """
                 print(f"{e}\n")
 
         elif choice == 4:
-            sys.print_chart()
+            try:
+                n = int(input("How many adjacent seats (2-3)? "))
+                seats = sys.book_adjacent(n)
+                if seats:
+                    print("Booked: " + ", ".join(seats) + "\n")
+                else:
+                    print("No adjacent block found.\n")
+            except ValueError as e:
+                print(f"{e}\n")
 
         elif choice == 5:
+            sys.print_chart()
+
+        elif choice == 6:
             break
 
         else:

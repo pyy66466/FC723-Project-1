@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict
+from typing import Dict, List, Optional
 
 # -------- Aircraft-level constants (one airframe, global) ----------
 LETTERS: str = "ABCDEF"                # Seat letters per row
@@ -30,6 +30,7 @@ class SeatBookingSystem:
 
     # ---------------- validation ----------------------
     def normalise_seat(self, code: str) -> str:
+        """Validate input seat code for other functionalities, reject invalid seat codes."""
         code = code.strip().upper()
         if not code or not code[-1].isalpha() or not code[:-1].isdigit():
             raise ValueError("Please input a correct seat code, e.g. 1A or 3F")
@@ -62,6 +63,26 @@ class SeatBookingSystem:
             return True
         return False
 
+    # ---------------- adjacent-seat ops ---------------
+    def find_adjacent(self, n: int) -> Optional[List[str]]:
+        """Return *n* consecutive free seats on one side of aisle, else None."""
+        if n not in (2, 3):
+            raise ValueError("Adjacent seat booking is only allowed for 2 or 3 seats")
+        for row in ROWS:
+            for side in ("ABC", "DEF"):
+                for i in range(len(side) - n + 1):
+                    block = [f"{row}{ltr}" for ltr in side[i : i + n]]
+                    if all(self.seats[s] == "F" for s in block):
+                        return block
+        return None
+
+    def book_adjacent(self, n: int) -> Optional[List[str]]:
+        seats = self.find_adjacent(n)
+        if seats:
+            for s in seats:
+                self.seats[s] = "R"
+        return seats
+    
     # ---------------- reporting -----------------------
     def summary(self) -> Dict[str, int]:
         counts = {"F": 0, "R": 0, "S": 0}

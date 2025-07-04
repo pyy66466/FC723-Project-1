@@ -51,6 +51,7 @@ coverage.xml
 # === Environment / dotenv ===
 .env
 .env.*
+.python-version
 
 # === Backup / temp ===
 *~

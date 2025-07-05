@@ -5,10 +5,10 @@ def main() -> None:
     sys = SeatBookingSystem()
     menu = """
 === BURAK 757 SEAT BOOKING ===
-1. Check availability
-2. Book seat
+1. Check seat availability
+2. Book seat (single)
 3. Free seat
-4. Book adjacent seats
+4. Book adjacent seats (2-3)
 5. Show seating chart
 6. Exit
 Choice: """
@@ -17,7 +17,7 @@ Choice: """
         try:
             choice = int(input(menu))
         except ValueError:
-            print("Please a number 1-5\n")
+            print("Please a number 1-6\n")
             continue
 
         if choice == 1:

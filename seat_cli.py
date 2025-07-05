@@ -29,8 +29,18 @@ Choice: """
 
         elif choice == 2:
             code = input("Seat code to book: ")
+            pno  = input("Passport no: ")
+            fn   = input("First name : ")
+            ln   = input("Last name  : ")
             try:
-                print(f"Seat {code} is successfully booked\n" if sys.book_seat(code) else f"Seat {code} is not available\n")
+                ref  = sys.book_seat(code, pno, fn, ln)
+                if ref:
+                    print("\nBooking successful:\n")
+
+                    print(f"  Passenger: {fn} {ln} | Passport: {pno}")
+                    print(f"  Seat: {code} | Booking Reference: {ref}\n")
+                else:
+                    print(f"Seat {code} is not available\n")
             except ValueError as e:
                 print(f"{e}\n")
 
@@ -43,14 +53,25 @@ Choice: """
 
         elif choice == 4:
             try:
-                n = int(input("How many adjacent seats (2-3)? "))
-                seats = sys.book_adjacent(n)
-                if seats:
-                    print("Booked: " + ", ".join(seats) + "\n")
+                n = int(input("Group size (2 or 3): "))
+                passengers: list[tuple[str, str, str]] = []
+                for i in range(1, n + 1):
+                    print(f"\nPassenger {i}:")
+                    pno = input("  Passport no: ")
+                    fn  = input("  First name : ")
+                    ln  = input("  Last name  : ")
+                    passengers.append((pno, fn, ln))
+
+                seats_refs = sys.book_adjacent(passengers)
+                if seats_refs:
+                    print("\nBooking successful:\n")
+                    for (seat, ref), (pno, fn, ln) in zip(seats_refs, passengers):
+                        print(f"  Passenger: {fn} {ln} | Passport: {pno}")
+                        print(f"  Seat: {seat} | Booking Reference: {ref}\n")
                 else:
-                    print("No adjacent block found.\n")
+                    print("No adjacent block available.\n")
             except ValueError as e:
-                print(f"{e}\n")
+                print(e, "\n")
 
         elif choice == 5:
             sys.print_chart()

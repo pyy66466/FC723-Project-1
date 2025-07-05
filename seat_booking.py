@@ -1,5 +1,6 @@
 from __future__ import annotations
-import sqlite3, string, secrets
+import os, datetime, sqlite3, string, secrets
+from pathlib import Path
 from typing import Dict, List, Optional
 
 # ---------------- Aircraft-level constants (one airframe, global) ----------------
@@ -14,53 +15,126 @@ SeatMap = Dict[str, str]               # e.g. {"1A": "F"}, value can be F / S / 
 class SeatBookingSystem:
     """Core booking class.  Status: F (free), S (storage) or 8‑char booking reference."""
 
-    def __init__(self, db_path: str = ":memory:") -> None:
+    def __init__(self, db_path: str | os.PathLike | None = "booking.db") -> None:
         self.seats: SeatMap = {}
         self._init_seats()
-        self.conn = sqlite3.connect(db_path)
-        self._init_db()
+        self.db_path = db_path
+        self.conn = self._open_or_create_db(db_path)
+        self._assure_schema()
         self._load_existing_bookings()
 
-    # ---------------- schema ----------------
-    def _init_db(self) -> None:
-        cur = self.conn.cursor()
-        cur.execute(
-            """
-            CREATE TABLE IF NOT EXISTS booking(
-                ref TEXT,
-                passport TEXT,
-                first_name TEXT,
-                last_name TEXT,
-                row INTEGER,
-                col TEXT,
-                PRIMARY KEY (row, col)      -- one row per seat
-            )
-            """
-        )
-        self.conn.commit()
-
-    def _load_existing_bookings(self) -> None:
-        """Populate seat map from rows already in the DB (startup sync)."""
-        cur = self.conn.cursor()
-        for ref, row, col in cur.execute("SELECT ref, row, col FROM booking"):
-            code = f"{row}{col}"
-            if self.seats.get(code) == "F":   # only update if seat is free
-                self.seats[code] = ref
-
-    # ---------------- seat map ----------------
+    # ---------------- seat map initialisation ----------------
     def _init_seats(self) -> None:
         for r in ROWS:
             for c in LETTERS:
                 code = f"{r}{c}"
                 self.seats[code] = "S" if r in STORAGE_ROWS and c in STORAGE_COLS else "F"
 
+    # ---------------- db ----------------
+    def _open_or_create_db(self, db_path):
+        """
+        Open or create db, handles E1, E2, E3:
+        - E1: db_path is None or empty
+        - E2: Folder in db_path does not exist
+        - E3: File exists but is not SQLite (binary or text file)
+        
+        """
+        if not db_path:
+            return sqlite3.connect(":memory:")
+
+        db_path = Path(db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)  # E2
+
+        try:
+            conn = sqlite3.connect(db_path)
+            conn.execute("PRAGMA schema_version")  # Force SQLite to parse DB file
+            return conn
+        except sqlite3.DatabaseError:
+            ts = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+            corrupt = db_path.with_suffix(f".corrupt-{ts}.db")
+            db_path.rename(corrupt)
+            print(f"[WARN] Corrupt DB renamed to {corrupt}")
+            return sqlite3.connect(db_path)  # fresh empty file
+        
+    def _create_booking_table(self) -> None:
+        self.conn.execute(
+            """
+            CREATE TABLE booking(
+                ref TEXT,                 -- shared reference
+                passport TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                row INTEGER,
+                col TEXT,
+                PRIMARY KEY (row, col)    -- one row PER SEAT
+            )
+            """
+        )
+        self.conn.commit()
+
+    def _assure_schema(self):
+        """
+        Assure db schema, handles E4, E5:
+        - E4: File is SQLite but contains no booking table
+        - E5: booking table exists but has missing / extra columns
+        """
+        cur = self.conn.cursor()
+        # Does booking table exist?
+        cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='booking'"
+        )
+        if not cur.fetchone():  # E4
+            self._create_booking_table()
+            return
+
+        # Verify required columns
+        cur.execute("PRAGMA table_info(booking)")
+        existing_cols = {row[1] for row in cur.fetchall()}
+        required = {
+            "ref",
+            "passport",
+            "first_name",
+            "last_name",
+            "row",
+            "col",
+        }
+        missing = required - existing_cols
+        extra = existing_cols - required
+        if missing:
+            # attempt simple ALTER TABLE for each missing column
+            for col in missing:
+                if col in {"row"}:
+                    cur.execute("ALTER TABLE booking ADD COLUMN row INTEGER")
+                elif col in {"col"}:
+                    cur.execute("ALTER TABLE booking ADD COLUMN col TEXT")
+                else:
+                    cur.execute(f"ALTER TABLE booking ADD COLUMN {col} TEXT")
+            self.conn.commit()
+        if extra:
+            print(
+                "[WARN] booking table has unexpected columns – "
+                "program continues but they will be ignored: ",
+                extra,
+            )
+    
+    def _load_existing_bookings(self) -> None:
+        """
+        Populate seat map from rows already in the DB (startup sync), handles E6:
+        - E6: Booking table has data but seat map still initialises with 'F' for those seats
+        """
+        cur = self.conn.cursor()
+        for ref, row, col in cur.execute("SELECT ref, row, col FROM booking"):
+            code = f"{row}{col}"
+            if self.seats.get(code) == "F":   # only update if seat is free
+                self.seats[code] = ref
+
     # ---------------- reference logic ----------------
     def _new_ref(self) -> str:
         """Return a unique 8‑char reference (A‑Z, 0‑9).
 
         Algorithm:
-        • Uses `secrets.choice` for cryptographic randomness.
-        • Checks both in‑memory seat map AND DB for uniqueness.
+        - Uses `secrets.choice` for cryptographic randomness.
+        - Checks both in‑memory seat map AND DB for uniqueness.
         """
         alphabet = string.ascii_uppercase + string.digits
         while True:
@@ -89,9 +163,6 @@ class SeatBookingSystem:
     def seat_status(self, code: str) -> str:
         return self.seats[self.normalise_seat(code)]
 
-    def is_free(self, code: str) -> bool:
-        return self.seat_status(code) == "F"
-
     def book_seat(
         self,
         code: str,
@@ -111,6 +182,7 @@ class SeatBookingSystem:
             (ref, passport, first, last, row, col),
         )
         self.conn.commit()
+        self.seats[code] = ref
         return ref
 
     def free_seat(self, code: str) -> bool:
@@ -118,10 +190,11 @@ class SeatBookingSystem:
         current = self.seats[code]
         if current == "F":
             return False
-        # remove DB row
-        self.conn.execute("DELETE FROM booking WHERE ref=?", (current,))
+        row, col = int(code[:-1]), code[-1]
+        self.conn.execute(
+            "DELETE FROM booking WHERE row=? AND col=?", (row, col)
+        )
         self.conn.commit()
-        # reset seat
         self.seats[code] = "F"
         return True
 
@@ -150,15 +223,15 @@ class SeatBookingSystem:
         if not block:
             return None
 
-        ref = self._new_ref()
         result: list[tuple[str, str]] = []
         for (passport, first, last), seat_code in zip(passengers, block):
-            self.seats[seat_code] = ref
+            ref = self._new_ref()
             row, col = int(seat_code[:-1]), seat_code[-1]
             self.conn.execute(
                 "INSERT INTO booking VALUES (?,?,?,?,?,?)",
                 (ref, passport, first, last, row, col),
             )
+            self.seats[seat_code] = ref
             result.append((seat_code, ref))
         self.conn.commit()
         return result
@@ -172,12 +245,15 @@ class SeatBookingSystem:
         return {"free": cnt["F"], "reserved": cnt["R"], "storage": cnt["S"]}
 
     def print_chart(self) -> None:
-        print("\nLEGEND  F free | S storage | X aisle | *** = booked ref\n")
+        print("\nLEGEND  F = free | *** = booked | S = storage | X = aisle\n")
+        print("      A   B   C    X    D   E   F")  # Column headers, padded to match seats
+
         for r in ROWS:
             def cell(ltr: str) -> str:
                 val = self.seats[f"{r}{ltr}"]
-                return " S " if val == "S" else " F " if val == "F" else "***"
+                return f"{f'{val[:2]}*' if val not in {'F', 'S'} else val:^3}"
+
             left = " ".join(cell(l) for l in "ABC")
             right = " ".join(cell(l) for l in "DEF")
-            print(f"{r:>2} {left}  X  {right}")
+            print(f"{r:>2}   {left}   X   {right}")
         print()

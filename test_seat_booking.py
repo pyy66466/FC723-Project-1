@@ -35,9 +35,8 @@ def test_adjacent_3_passengers(empty_plane):
     ]
     seats_refs = empty_plane.book_adjacent(passengers)
     assert seats_refs and len(seats_refs) == 3
-    ref = seats_refs[0][1]
     for seat, r in seats_refs:
-        assert empty_plane.seat_status(seat) == ref
+        assert empty_plane.seat_status(seat) == r
 
 def test_adjacent_booking_failure(half_full_plane):
     passengers = [
@@ -57,12 +56,11 @@ def test_summary_counts(empty_plane):
     assert summary["free"] + summary["reserved"] + summary["storage"] == 80 * 6
 
 def test_db_load(tmp_path):
-    db_file = tmp_path / "pre.db"
-    con = sqlite3.connect(db_file)
-    con.execute("CREATE TABLE booking(ref TEXT, passport TEXT, first_name TEXT, last_name TEXT, row INT, col TEXT)")
+    db = tmp_path / "seed.db"
+    con = sqlite3.connect(db)
+    con.execute("CREATE TABLE booking(ref, passport, first_name, last_name, row, col, PRIMARY KEY(row,col))")
     con.execute("INSERT INTO booking VALUES('REF12345','PZ','Old','Rec',10,'B')")
-    con.commit()
-    con.close()
+    con.commit(); con.close()
 
-    sys = SeatBookingSystem(str(db_file))
+    sys = SeatBookingSystem(db)
     assert sys.seat_status("10B") == "REF12345"

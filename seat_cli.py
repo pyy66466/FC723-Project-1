@@ -17,7 +17,7 @@ Choice: """
         try:
             choice = int(input(menu))
         except ValueError:
-            print("Please a number 1-6\n")
+            print("Please enter a number: 1-6\n")
             continue
 
         if choice == 1:
